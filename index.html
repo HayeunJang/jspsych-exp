@@ -33,7 +33,7 @@
     console.log('Script starting...');
 
     /* ===== CONFIG ===== */
-    const GAS_ENDPOINT = 'https://script.google.com/macros/s/AKfycbzW2u1DzukQYmCVhCnpO8mKwoN9Okb2zS-WlbAcbOwFjqbQZT68B8BTGC3PNT_0yuF0EQ/exec';
+    const GAS_ENDPOINT = 'https://script.google.com/macros/s/AKfycbx_V4Ay6Nzl1sw94IMxKUL_a0E-t9w-pNsvRpi3WV_GMWx9lLCuUhP1Q2ZtQTJ2yINz1A/exec';
 
     /* ===== UI TEXTS ===== */
     const TEXTS = {
@@ -52,7 +52,7 @@
     const STIMULI = [
       { file: 'audio/amazed.wav' },
       { file: 'audio/sarcastic.wav' },
-      { file: 'audio/angry.wav' },
+      { file: 'audio/angry.wav' }
     ];
 
     /* ===== SLIDER SETTINGS ===== */
@@ -168,27 +168,28 @@
       trial_ends_after_audio: false,
       data: { 
         task: 'rating', 
-        stimulus_file: jsPsych.timelineVariable('file')
+        stimulus_file: jsPsych.timelineVariable('file'),
+        trial_start_time: () => new Date().toISOString() // 함수로 실행 시점에 생성
       },
       on_load: function() {
-        // 오디오가 끝나는 시점의 timestamp 기록
+        console.log('Trial loaded');
+        
+        // 오디오가 끝나는 시점 기록
         const audio = document.querySelector('audio');
         if (audio) {
           audio.addEventListener('ended', () => {
-            const trialData = jsPsych.data.get().last(1).values()[0];
-            trialData.audio_end_time = new Date().toISOString();
-            console.log('Audio ended at:', trialData.audio_end_time);
-          });
+            // 현재 진행중인 trial의 data에 직접 저장
+            const currentTrial = jsPsych.getCurrentTrial();
+            currentTrial.data.audio_end_time = new Date().toISOString();
+            console.log('Audio ended at:', currentTrial.data.audio_end_time);
+          }, { once: true }); // 한 번만 실행
         }
-        // 트라이얼 시작 시점
-        const trialData = jsPsych.data.get().last(1).values()[0];
-        trialData.trial_start_time = new Date().toISOString();
       },
       on_finish: (data) => {
         data.rating = data.response;
         data.stimulus = data.stimulus_file || data.stimulus;
-        data.user_agent = navigator.userAgent;
         data.response_time = new Date().toISOString(); // 응답한 시점
+        data.user_agent = navigator.userAgent;
         
         console.log('Trial finished:', {
           stimulus: data.stimulus,
@@ -267,4 +268,3 @@
   </script>
 </body>
 </html>
-
