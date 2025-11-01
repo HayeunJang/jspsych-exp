@@ -9,6 +9,7 @@
   <script src="https://unpkg.com/@jspsych/plugin-html-button-response@2.0.0"></script>
   <script src="https://unpkg.com/@jspsych/plugin-preload@2.0.0"></script>
   <script src="https://unpkg.com/@jspsych/plugin-audio-slider-response@2.0.0"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-survey-html-form@2.0.0"></script>
 </head>
 <body>
   <div id="jspsych-target"></div>
@@ -36,8 +37,8 @@
 
     /* ===== STIMULI ===== */
     const STIMULI = [
-      { file: 'audio/amazed.wav' },
-      { file: 'audio/sarcastic.wav' }
+      { file: 'assets/audio/amazed.wav' },
+      { file: 'assets/audio/sarcastic.wav' }
     ];
 
     /* ===== SLIDER SETTINGS ===== */
@@ -86,7 +87,44 @@
       choices: [TEXTS.finishBtn]
     };
 
+    /* ===== DEMOGRAPHIC SURVEY ===== */
+    const demographics = {
+      type: jsPsychSurveyHtmlForm,
+      preamble: '<h3>참가자 정보</h3><p>아래 정보를 입력해주세요.</p>',
+      html: `
+        <div style="text-align: left; max-width: 500px; margin: 0 auto;">
+          <p><label for="gender"><strong>성별:</strong></label><br>
+          <input type="radio" name="gender" value="남" required> 남
+          <input type="radio" name="gender" value="여" required> 여</p>
+          
+          <p><label for="birth_year"><strong>태어난 해:</strong></label><br>
+          <input type="text" id="birth_year" name="birth_year" placeholder="YYYY (예: 1995)" pattern="[0-9]{4}" required style="width: 150px;"></p>
+          
+          <p><label for="birth_month"><strong>태어난 월:</strong></label><br>
+          <input type="text" id="birth_month" name="birth_month" placeholder="MM (예: 03)" pattern="[0-9]{2}" required style="width: 80px;"></p>
+          
+          <p><label for="native_lang"><strong>모국어:</strong></label><br>
+          <input type="text" id="native_lang" name="native_lang" placeholder="예: 한국어" required style="width: 200px;"></p>
+          
+          <p><label for="dialect"><strong>방언:</strong></label><br>
+          <input type="text" id="dialect" name="dialect" placeholder="예: 서울, 경상도" style="width: 200px;"></p>
+          
+          <p><label for="foreign_lang"><strong>외국어:</strong></label><br>
+          <input type="text" id="foreign_lang" name="foreign_lang" placeholder="예: 영어, 일본어" style="width: 300px;"></p>
+        </div>
+      `,
+      button_label: '제출',
+      data: { task: 'demographics' },
+      on_finish: (data) => {
+        data.user_agent = navigator.userAgent;
+        data.timestamp = new Date().toISOString();
+        console.log('Demographics:', data.response);
+      }
+    };
+
     /* ===== RATING TRIAL ===== */
+    let audioEndTime = null; // 전역 변수로 오디오 종료 시점 저장
+
     const rating_trial = {
       type: jsPsychAudioSliderResponse,
       stimulus: jsPsych.timelineVariable('file'),
@@ -108,28 +146,33 @@
       },
       on_load: function() {
         // 오디오 재생 종료 시점 기록
+        audioEndTime = null; // 초기화
         const audio = document.querySelector('audio');
         if (audio) {
           audio.addEventListener('ended', () => {
-            this.audioEndTime = performance.now();
+            audioEndTime = performance.now();
+            console.log('Audio ended at:', audioEndTime);
           });
         }
       },
       on_finish: (data) => {
         // RT를 오디오 종료 시점부터 재계산
-        if (rating_trial.audioEndTime) {
+        data.rt_original = data.rt; // 원본 RT 보존
+        
+        if (audioEndTime !== null) {
           const responseTime = performance.now();
-          data.rt_after_audio = Math.round(responseTime - rating_trial.audioEndTime);
+          data.rt_after_audio = Math.round(responseTime - audioEndTime);
+          data.rt = data.rt_after_audio; // 새 RT로 교체
         } else {
+          // 오디오 종료 감지 실패시 원본 RT 유지
           data.rt_after_audio = null;
+          console.warn('Audio end time not detected, using original RT');
         }
         
         data.rating = data.response;
         data.stimulus = data.stimulus_file || data.stimulus;
         data.user_agent = navigator.userAgent;
         data.timestamp = new Date().toISOString();
-        data.rt_original = data.rt; // 원본 RT 보존
-        data.rt = data.rt_after_audio; // 새 RT로 교체
         
         console.log('Trial finished:', {
           stimulus: data.stimulus,
@@ -148,7 +191,7 @@
     };
 
     /* ===== RUN ===== */
-    jsPsych.run([preload, welcome, rating_block, end]);
+    jsPsych.run([preload, welcome, rating_block, demographics, end]);
 
     /* ===== GOOGLE UPLOAD ===== */
     async function uploadAllRowsToGoogle() {
@@ -157,16 +200,37 @@
         return false;
       }
       try {
-        const rows = jsPsych.data.get().values().map(d => ({
-          trial_index:  d.trial_index,
-          task:         d.task || '',
-          stimulus:     d.stimulus || d.stimulus_file || '',
-          rating:       d.rating ?? d.response,
-          rt:           d.rt,
-          time_elapsed: d.time_elapsed,
-          timestamp:    d.timestamp || new Date().toISOString(),
-          user_agent:   d.user_agent || navigator.userAgent
-        }));
+        const rows = jsPsych.data.get().values().map(d => {
+          const baseData = {
+            trial_index:  d.trial_index,
+            task:         d.task || '',
+            stimulus:     d.stimulus || d.stimulus_file || '',
+            rating:       d.rating ?? d.response,
+            rt:           d.rt,
+            time_elapsed: d.time_elapsed,
+            timestamp:    d.timestamp || new Date().toISOString(),
+            user_agent:   d.user_agent || navigator.userAgent
+          };
+          
+          // demographics 데이터 추가
+          if (d.task === 'demographics' && d.response) {
+            baseData.gender = d.response.gender || '';
+            baseData.birth_year = d.response.birth_year || '';
+            baseData.birth_month = d.response.birth_month || '';
+            baseData.native_lang = d.response.native_lang || '';
+            baseData.dialect = d.response.dialect || '';
+            baseData.foreign_lang = d.response.foreign_lang || '';
+          } else {
+            baseData.gender = '';
+            baseData.birth_year = '';
+            baseData.birth_month = '';
+            baseData.native_lang = '';
+            baseData.dialect = '';
+            baseData.foreign_lang = '';
+          }
+          
+          return baseData;
+        });
 
         await fetch(GAS_ENDPOINT, {
           method: 'POST',
@@ -184,3 +248,4 @@
   </script>
 </body>
 </html>
+
