@@ -4,8 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Audio Rating Task</title>
+
+  <!-- jsPsych CSS -->
   <link rel="stylesheet" href="https://unpkg.com/jspsych@8.0.0/css/jspsych.css">
-  <script src="https://unpkg.com/jspsych@8.0.0"></script>
+
+  <!-- jsPsych core (fixed: use /dist/jspsych.js) -->
+  <script src="https://unpkg.com/jspsych@8.0.0/dist/jspsych.js"></script>
+
+  <!-- Plugins -->
   <script src="https://unpkg.com/@jspsych/plugin-html-button-response@2.0.0"></script>
   <script src="https://unpkg.com/@jspsych/plugin-preload@2.0.0"></script>
   <script src="https://unpkg.com/@jspsych/plugin-audio-slider-response@2.0.0"></script>
@@ -13,7 +19,7 @@
 </head>
 <body>
   <div id="jspsych-target"></div>
-  
+
   <script>
     /******************************************************
      * Audio Rating Task (slider) + Google Sheets upload
@@ -58,7 +64,7 @@
           const blob = new Blob([csv], { type: 'text/csv' });
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
-          a.href = url; 
+          a.href = url;
           a.download = 'data_fallback.csv';
           a.textContent = 'Download CSV (upload failed)';
           a.style.display = 'block';
@@ -88,28 +94,28 @@
       choices: [TEXTS.finishBtn]
     };
 
-    /* ===== DEMOGRAPHIC SURVEY ===== */
-    const demographics = {
+    /* ===== DEMOGRAPHIC SURVEY (renamed to avoid confusion) ===== */
+    const demoSurvey = {
       type: jsPsychSurveyHtmlForm,
       preamble: '<h3>참가자 정보</h3><p>아래 정보를 입력해주세요.</p>',
       html: `
         <div style="text-align: left; max-width: 500px; margin: 0 auto;">
-          <p><label for="gender"><strong>성별:</strong></label><br>
+          <p><label><strong>성별:</strong></label><br>
           <input type="radio" name="gender" value="남" required> 남
-          <input type="radio" name="gender" value="여" required> 여</p>
-          
+          <input type="radio" name="gender" value="여"> 여</p>
+
           <p><label for="birth_year"><strong>태어난 해:</strong></label><br>
           <input type="text" id="birth_year" name="birth_year" placeholder="YYYY (예: 1995)" pattern="[0-9]{4}" required style="width: 150px;"></p>
-          
+
           <p><label for="birth_month"><strong>태어난 월:</strong></label><br>
           <input type="text" id="birth_month" name="birth_month" placeholder="MM (예: 03)" pattern="[0-9]{2}" required style="width: 80px;"></p>
-          
+
           <p><label for="native_lang"><strong>모국어:</strong></label><br>
           <input type="text" id="native_lang" name="native_lang" placeholder="예: 한국어" required style="width: 200px;"></p>
-          
+
           <p><label for="dialect"><strong>방언:</strong></label><br>
           <input type="text" id="dialect" name="dialect" placeholder="예: 서울, 경상도" style="width: 200px;"></p>
-          
+
           <p><label for="foreign_lang"><strong>외국어:</strong></label><br>
           <input type="text" id="foreign_lang" name="foreign_lang" placeholder="예: 영어, 일본어" style="width: 300px;"></p>
         </div>
@@ -119,11 +125,10 @@
       on_finish: (data) => {
         data.user_agent = navigator.userAgent;
         data.timestamp = new Date().toISOString();
-        console.log('Demographics:', data.response);
       }
     };
 
-    /* ===== RATING TRIAL ===== */
+    /* ===== RATING TRIAL (fixed slider param names) ===== */
     function makeAudioRatingTrial(tv) {
       let t_trial, t_audio_start, t_audio_end;
       return {
@@ -133,16 +138,15 @@
                  <div style="display:flex;justify-content:space-between;font-size:0.9rem;margin-top:4px;">
                   <span>${TEXTS.leftLabel}</span><span>${TEXTS.rightLabel}</span>
                  </div>`,
-        min: SLIDER.min,
-        max: SLIDER.max,
+        slider_min: SLIDER.min,
+        slider_max: SLIDER.max,
         slider_start: SLIDER.start,
-        step: SLIDER.step,
+        slider_step: SLIDER.step,
         labels: SLIDER.labels,
         require_movement: SLIDER.require_movement,
         response_allowed_while_playing: false,
         on_load: () => {
-          t_trial = performance.now(); // 화면이 뜬 시점
-          // jsPsych가 만드는 <audio> 엘리먼트에 이벤트 걸어서 정확한 타임스탬프 확보
+          t_trial = performance.now();
           const audioEl = document.querySelector('audio');
           if (audioEl) {
             audioEl.addEventListener('play',  () => { t_audio_start = performance.now(); }, { once: true });
@@ -152,39 +156,27 @@
         data: { task: 'rating', stimulus_file: tv.file },
         on_finish: (d) => {
           const t_resp = performance.now();
-          // 플러그인 기본 rt도 보존
           d.rt_plugin = d.rt;
-          // 우리가 정의하는 안정적인 RT들(항상 양수, 해석 명확)
-          d.rt_from_trial_display = Math.max(0, Math.round(t_resp - t_trial));            // 화면 표시→응답
-          d.rt_from_audio_start   = t_audio_start ? Math.max(0, Math.round(t_resp - t_audio_start)) : null; // 오디오 시작→응답
-          d.rt_from_audio_end     = t_audio_end   ? Math.max(0, Math.round(t_resp - t_audio_end))   : null; // 오디오 끝→응답
-          // 참고 메타
-          d.t_audio_started = t_audio_start ? new Date().toISOString() : null;
-          d.t_audio_ended   = t_audio_end   ? new Date().toISOString() : null;
+          d.rt_from_trial_display = Math.max(0, Math.round(t_resp - t_trial));
+          d.rt_from_audio_start   = t_audio_start ? Math.max(0, Math.round(t_resp - t_audio_start)) : null;
+          d.rt_from_audio_end     = t_audio_end   ? Math.max(0, Math.round(t_resp - t_audio_end))   : null;
           d.rating     = d.response;
           d.stimulus   = d.stimulus_file || d.stimulus;
           d.user_agent = navigator.userAgent;
           d.timestamp  = new Date().toISOString();
-          
-          console.log('Trial finished:', {
-            stimulus: d.stimulus,
-            rt_plugin: d.rt_plugin,
-            rt_from_audio_end: d.rt_from_audio_end,
-            rating: d.rating
-          });
         }
       };
     }
 
     /* ===== RANDOM ORDER BLOCK ===== */
     const rating_block = {
-      timeline: [makeAudioRatingTrial(jsPsych.timelineVariable('tv'))],
+      timeline: [ makeAudioRatingTrial(jsPsych.timelineVariable('tv')) ],
       timeline_variables: STIMULI.map(s => ({ tv: s })),
       randomize_order: true
     };
 
     /* ===== RUN ===== */
-    jsPsych.run([preload, welcome, rating_block, demographics, end]);
+    jsPsych.run([preload, welcome, rating_block, demoSurvey, end]);
 
     /* ===== GOOGLE UPLOAD ===== */
     async function uploadAllRowsToGoogle() {
@@ -194,12 +186,11 @@
       }
       try {
         const allData = jsPsych.data.get().values();
-        
-        // demographics 정보 추출
-        const demoData = allData.find(d => d.task === 'demographics');
-        const demographics = demoData?.response || {};
-        
-        // rating task만 필터링하고 demographics 정보 추가
+
+        // demographics 응답 추출 (renamed variable)
+        const demoResp = allData.find(d => d.task === 'demographics')?.response || {};
+
+        // rating 행만 업로드 + demographics 병합
         const rows = allData
           .filter(d => d.task === 'rating')
           .map(d => ({
@@ -211,12 +202,12 @@
             time_elapsed: d.time_elapsed,
             timestamp:    d.timestamp || new Date().toISOString(),
             user_agent:   d.user_agent || navigator.userAgent,
-            gender:       demographics.gender || '',
-            birth_year:   demographics.birth_year || '',
-            birth_month:  demographics.birth_month || '',
-            native_lang:  demographics.native_lang || '',
-            dialect:      demographics.dialect || '',
-            foreign_lang: demographics.foreign_lang || ''
+            gender:       demoResp.gender || '',
+            birth_year:   demoResp.birth_year || '',
+            birth_month:  demoResp.birth_month || '',
+            native_lang:  demoResp.native_lang || '',
+            dialect:      demoResp.dialect || '',
+            foreign_lang: demoResp.foreign_lang || ''
           }));
 
         await fetch(GAS_ENDPOINT, {
