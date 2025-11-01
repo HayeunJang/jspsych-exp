@@ -4,14 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Audio Rating Task</title>
-
-  <!-- jsPsych CSS -->
   <link rel="stylesheet" href="https://unpkg.com/jspsych@8.0.0/css/jspsych.css">
-
-  <!-- jsPsych core (fixed: use /dist/jspsych.js) -->
-  <script src="https://unpkg.com/jspsych@8.0.0/dist/jspsych.js"></script>
-
-  <!-- Plugins -->
+  <script src="https://unpkg.com/jspsych@8.0.0"></script>
   <script src="https://unpkg.com/@jspsych/plugin-html-button-response@2.0.0"></script>
   <script src="https://unpkg.com/@jspsych/plugin-preload@2.0.0"></script>
   <script src="https://unpkg.com/@jspsych/plugin-audio-slider-response@2.0.0"></script>
@@ -19,7 +13,7 @@
 </head>
 <body>
   <div id="jspsych-target"></div>
-
+  
   <script>
     /******************************************************
      * Audio Rating Task (slider) + Google Sheets upload
@@ -43,9 +37,8 @@
 
     /* ===== STIMULI ===== */
     const STIMULI = [
-      { file: 'audio/amazed.wav' },
-      { file: 'audio/sarcastic.wav' },
-      { file: 'audio/angry.wav' }
+      { file: 'assets/audio/amazed.wav' },
+      { file: 'assets/audio/sarcastic.wav' }
     ];
 
     /* ===== SLIDER SETTINGS ===== */
@@ -64,7 +57,7 @@
           const blob = new Blob([csv], { type: 'text/csv' });
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
-          a.href = url;
+          a.href = url; 
           a.download = 'data_fallback.csv';
           a.textContent = 'Download CSV (upload failed)';
           a.style.display = 'block';
@@ -94,28 +87,28 @@
       choices: [TEXTS.finishBtn]
     };
 
-    /* ===== DEMOGRAPHIC SURVEY (renamed to avoid confusion) ===== */
-    const demoSurvey = {
+    /* ===== DEMOGRAPHIC SURVEY ===== */
+    const demographics = {
       type: jsPsychSurveyHtmlForm,
       preamble: '<h3>참가자 정보</h3><p>아래 정보를 입력해주세요.</p>',
       html: `
         <div style="text-align: left; max-width: 500px; margin: 0 auto;">
-          <p><label><strong>성별:</strong></label><br>
+          <p><label for="gender"><strong>성별:</strong></label><br>
           <input type="radio" name="gender" value="남" required> 남
-          <input type="radio" name="gender" value="여"> 여</p>
-
+          <input type="radio" name="gender" value="여" required> 여</p>
+          
           <p><label for="birth_year"><strong>태어난 해:</strong></label><br>
           <input type="text" id="birth_year" name="birth_year" placeholder="YYYY (예: 1995)" pattern="[0-9]{4}" required style="width: 150px;"></p>
-
+          
           <p><label for="birth_month"><strong>태어난 월:</strong></label><br>
           <input type="text" id="birth_month" name="birth_month" placeholder="MM (예: 03)" pattern="[0-9]{2}" required style="width: 80px;"></p>
-
+          
           <p><label for="native_lang"><strong>모국어:</strong></label><br>
           <input type="text" id="native_lang" name="native_lang" placeholder="예: 한국어" required style="width: 200px;"></p>
-
+          
           <p><label for="dialect"><strong>방언:</strong></label><br>
           <input type="text" id="dialect" name="dialect" placeholder="예: 서울, 경상도" style="width: 200px;"></p>
-
+          
           <p><label for="foreign_lang"><strong>외국어:</strong></label><br>
           <input type="text" id="foreign_lang" name="foreign_lang" placeholder="예: 영어, 일본어" style="width: 300px;"></p>
         </div>
@@ -125,58 +118,80 @@
       on_finish: (data) => {
         data.user_agent = navigator.userAgent;
         data.timestamp = new Date().toISOString();
+        console.log('Demographics:', data.response);
       }
     };
 
-    /* ===== RATING TRIAL (fixed slider param names) ===== */
-    function makeAudioRatingTrial(tv) {
-      let t_trial, t_audio_start, t_audio_end;
-      return {
-        type: jsPsychAudioSliderResponse,
-        stimulus: tv.file,
-        prompt: `<p>${TEXTS.prompt}</p>
-                 <div style="display:flex;justify-content:space-between;font-size:0.9rem;margin-top:4px;">
-                  <span>${TEXTS.leftLabel}</span><span>${TEXTS.rightLabel}</span>
-                 </div>`,
-        slider_min: SLIDER.min,
-        slider_max: SLIDER.max,
-        slider_start: SLIDER.start,
-        slider_step: SLIDER.step,
-        labels: SLIDER.labels,
-        require_movement: SLIDER.require_movement,
-        response_allowed_while_playing: false,
-        on_load: () => {
-          t_trial = performance.now();
-          const audioEl = document.querySelector('audio');
-          if (audioEl) {
-            audioEl.addEventListener('play',  () => { t_audio_start = performance.now(); }, { once: true });
-            audioEl.addEventListener('ended', () => { t_audio_end   = performance.now(); }, { once: true });
-          }
-        },
-        data: { task: 'rating', stimulus_file: tv.file },
-        on_finish: (d) => {
-          const t_resp = performance.now();
-          d.rt_plugin = d.rt;
-          d.rt_from_trial_display = Math.max(0, Math.round(t_resp - t_trial));
-          d.rt_from_audio_start   = t_audio_start ? Math.max(0, Math.round(t_resp - t_audio_start)) : null;
-          d.rt_from_audio_end     = t_audio_end   ? Math.max(0, Math.round(t_resp - t_audio_end))   : null;
-          d.rating     = d.response;
-          d.stimulus   = d.stimulus_file || d.stimulus;
-          d.user_agent = navigator.userAgent;
-          d.timestamp  = new Date().toISOString();
+    /* ===== RATING TRIAL ===== */
+    let audioEndTime = null; // 전역 변수로 오디오 종료 시점 저장
+
+    const rating_trial = {
+      type: jsPsychAudioSliderResponse,
+      stimulus: jsPsych.timelineVariable('file'),
+      prompt: `<p>${TEXTS.prompt}</p>
+               <div style="display:flex;justify-content:space-between;font-size:0.9rem;margin-top:4px;">
+                <span>${TEXTS.leftLabel}</span><span>${TEXTS.rightLabel}</span>
+               </div>`,
+      min: SLIDER.min,
+      max: SLIDER.max,
+      slider_start: SLIDER.start,
+      step: SLIDER.step,
+      labels: SLIDER.labels,
+      require_movement: SLIDER.require_movement,
+      response_allowed_while_playing: false,
+      trial_ends_after_audio: false,
+      data: { 
+        task: 'rating', 
+        stimulus_file: jsPsych.timelineVariable('file')
+      },
+      on_load: function() {
+        // 오디오 재생 종료 시점 기록
+        audioEndTime = null; // 초기화
+        const audio = document.querySelector('audio');
+        if (audio) {
+          audio.addEventListener('ended', () => {
+            audioEndTime = performance.now();
+            console.log('Audio ended at:', audioEndTime);
+          });
         }
-      };
-    }
+      },
+      on_finish: (data) => {
+        // RT를 오디오 종료 시점부터 재계산
+        data.rt_original = data.rt; // 원본 RT 보존
+        
+        if (audioEndTime !== null) {
+          const responseTime = performance.now();
+          data.rt_after_audio = Math.round(responseTime - audioEndTime);
+          data.rt = data.rt_after_audio; // 새 RT로 교체
+        } else {
+          // 오디오 종료 감지 실패시 원본 RT 유지
+          data.rt_after_audio = null;
+          console.warn('Audio end time not detected, using original RT');
+        }
+        
+        data.rating = data.response;
+        data.stimulus = data.stimulus_file || data.stimulus;
+        data.user_agent = navigator.userAgent;
+        data.timestamp = new Date().toISOString();
+        
+        console.log('Trial finished:', {
+          stimulus: data.stimulus,
+          rt_original: data.rt_original,
+          rt_after_audio: data.rt_after_audio,
+          rating: data.rating
+        });
+      }
+    };
 
     /* ===== RANDOM ORDER BLOCK ===== */
     const rating_block = {
-      timeline: [ makeAudioRatingTrial(jsPsych.timelineVariable('tv')) ],
-      timeline_variables: STIMULI.map(s => ({ tv: s })),
+      timeline: [rating_trial],
+      timeline_variables: STIMULI,
       randomize_order: true
     };
 
     /* ===== RUN ===== */
-    jsPsych.run([preload, welcome, rating_block, demoSurvey, end]);
+    jsPsych.run([preload, welcome, rating_block, demographics, end]);
 
     /* ===== GOOGLE UPLOAD ===== */
     async function uploadAllRowsToGoogle() {
@@ -186,11 +201,12 @@
       }
       try {
         const allData = jsPsych.data.get().values();
-
-        // demographics 응답 추출 (renamed variable)
-        const demoResp = allData.find(d => d.task === 'demographics')?.response || {};
-
-        // rating 행만 업로드 + demographics 병합
+        
+        // demographics 정보 추출
+        const demoData = allData.find(d => d.task === 'demographics');
+        const demographics = demoData?.response || {};
+        
+        // rating task만 필터링하고 demographics 정보 추가
         const rows = allData
           .filter(d => d.task === 'rating')
           .map(d => ({
@@ -202,12 +218,12 @@
             time_elapsed: d.time_elapsed,
             timestamp:    d.timestamp || new Date().toISOString(),
             user_agent:   d.user_agent || navigator.userAgent,
-            gender:       demoResp.gender || '',
-            birth_year:   demoResp.birth_year || '',
-            birth_month:  demoResp.birth_month || '',
-            native_lang:  demoResp.native_lang || '',
-            dialect:      demoResp.dialect || '',
-            foreign_lang: demoResp.foreign_lang || ''
+            gender:       demographics.gender || '',
+            birth_year:   demographics.birth_year || '',
+            birth_month:  demographics.birth_month || '',
+            native_lang:  demographics.native_lang || '',
+            dialect:      demographics.dialect || '',
+            foreign_lang: demographics.foreign_lang || ''
           }));
 
         await fetch(GAS_ENDPOINT, {
