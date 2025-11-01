@@ -24,10 +24,10 @@ const TEXTS = {
 
 /* ===== STIMULI: 오디오 파일 목록 (원하는 만큼 추가) ===== */
 const STIMULI = [
-  { file: 'assets/audio/amazed.wav' },
-  { file: 'assets/audio/sarcastic.wav' }
-  // { file: 'assets/audio/angry.wav' },
-  // { file: 'assets/audio/happy.wav' },
+  { file: 'audio/amazed.wav' },
+  { file: 'audio/sarcastic.wav' }
+  // { file: 'audio/angry.wav' },
+  // { file: 'audio/happy.wav' },
 ];
 
 /* ===== SLIDER SETTINGS (Likert 1–7 기본) ===== */
@@ -142,3 +142,4 @@ async function uploadAllRowsToGoogle() {
     return false;
   }
 }
+
